@@ -50,7 +50,7 @@ if(NOT TENSORFLOW_SOURCE_DIR)
   message(STATUS "Downloading TensorFlow repository...")
   FetchContent_Declare(
     tensorflow
-    GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
+    GIT_REPOSITORY https://gitcode.com/GitHub_Trending/te/tensorflow.git
     # v2.21.0-rc0 has updated schema_generated.h file.
     GIT_TAG v2.21.0-rc0
     GIT_SHALLOW TRUE

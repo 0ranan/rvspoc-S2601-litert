@@ -77,7 +77,7 @@ if(NOT FLATC_EXECUTABLE)
   include(FetchContent)
   message(STATUS "flatc not found; fetching FlatBuffers to build flatc")
   FetchContent_Declare(flatbuffers
-    GIT_REPOSITORY https://github.com/google/flatbuffers.git
+    GIT_REPOSITORY https://gitcode.com/GitHub_Trending/fl/flatbuffers.git
     GIT_TAG v25.9.23)
   set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(flatbuffers)

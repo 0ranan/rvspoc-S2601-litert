@@ -25,17 +25,17 @@ include(FetchContent)
 
 FetchContent_Declare(
         nlohmann_json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_REPOSITORY https://gitcode.com/GitHub_Trending/js/json.git
         GIT_TAG v3.11.3
     )
     FetchContent_Declare(
         googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_REPOSITORY https://gitcode.com/GitHub_Trending/go/googletest.git
         GIT_TAG v1.12.x
     )
     FetchContent_Declare(
         googlebenchmark
-        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_REPOSITORY https://gitcode.com/GitHub_Trending/benchmark3/benchmark.git
         GIT_TAG 0d98dba29d66e93259db7daa53a9327df767a415 # v1.6.1
 )
 

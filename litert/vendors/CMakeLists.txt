@@ -186,7 +186,7 @@ function(_litert_add_dispatch_so VENDOR DIR OUTPUT_BASENAME)
     if(NOT FLATC_EXECUTABLE)
       message(STATUS "flatc not found in PATH; fetching FlatBuffers to build flatc")
       FetchContent_Declare(flatbuffers
-        GIT_REPOSITORY https://github.com/google/flatbuffers.git
+        GIT_REPOSITORY https://gitcode.com/GitHub_Trending/fl/flatbuffers.git
         GIT_TAG v25.9.23
       )
       set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
