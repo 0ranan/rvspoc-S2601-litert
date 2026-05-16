@@ -18,6 +18,36 @@ FROM ubuntu:24.04
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Host proxy: use host.docker.internal (maps to the host via --add-host=host.docker.internal:host-gateway).
+# On native Linux Docker without Desktop, override: --build-arg PROXY_HOST=127.0.0.1 --network=host
+ARG PROXY_HOST=host.docker.internal
+ARG PROXY_PORT=7897
+ENV http_proxy=http://${PROXY_HOST}:${PROXY_PORT} \
+    https_proxy=http://${PROXY_HOST}:${PROXY_PORT} \
+    all_proxy=socks5://${PROXY_HOST}:${PROXY_PORT} \
+    HTTP_PROXY=http://${PROXY_HOST}:${PROXY_PORT} \
+    HTTPS_PROXY=http://${PROXY_HOST}:${PROXY_PORT} \
+    ALL_PROXY=socks5://${PROXY_HOST}:${PROXY_PORT} \
+    NO_PROXY=localhost,127.0.0.1,host.docker.internal,mirrors.aliyun.com,pypi.tuna.tsinghua.edu.cn \
+    no_proxy=localhost,127.0.0.1,host.docker.internal,mirrors.aliyun.com,pypi.tuna.tsinghua.edu.cn
+
+# Ubuntu apt mirror (Aliyun)
+RUN sed -i \
+    -e 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' \
+    -e 's|http://security.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' \
+    /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
+    sed -i \
+    's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g; \
+     s|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' \
+    /etc/apt/sources.list
+
+# pip mirror (Tsinghua)
+RUN mkdir -p /root/.pip && printf '%s\n' \
+    '[global]' \
+    'index-url = https://pypi.tuna.tsinghua.edu.cn/simple' \
+    'trusted-host = pypi.tuna.tsinghua.edu.cn' \
+    > /root/.pip/pip.conf
+
 # Install basic dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \

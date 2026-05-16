@@ -14,12 +14,28 @@
 
 #!/bin/bash
 
-version: '1'
 services:
   litert-build:
     build:
       context: .
       dockerfile: hermetic_build.Dockerfile
+      args:
+        PROXY_HOST: host.docker.internal
+        PROXY_PORT: "7897"
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+    image: litert_build_env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      http_proxy: http://host.docker.internal:7897
+      https_proxy: http://host.docker.internal:7897
+      all_proxy: socks5://host.docker.internal:7897
+      HTTP_PROXY: http://host.docker.internal:7897
+      HTTPS_PROXY: http://host.docker.internal:7897
+      ALL_PROXY: socks5://host.docker.internal:7897
+      NO_PROXY: localhost,127.0.0.1,host.docker.internal,mirrors.aliyun.com,pypi.tuna.tsinghua.edu.cn
+      no_proxy: localhost,127.0.0.1,host.docker.internal,mirrors.aliyun.com,pypi.tuna.tsinghua.edu.cn
     volumes:
-      - .:/litert_build
+      - ..:/litert_build
     command: bash -c "bazel build //litert/runtime:compiled_model"
