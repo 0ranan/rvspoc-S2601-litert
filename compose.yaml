@@ -1,0 +1,10 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: rspvsoc-dev
+    volumes:
+      - .:/app
+    stdin_open: true # 保持标准输入打开，允许交互式操作
+    tty: true # 分配一个伪终端，使容器支持交互式操作
