@@ -25,8 +25,9 @@ list(APPEND benchmark_result_generated_files
 # upgraded, we can use protobuf_generate_cpp/protobuf_generate here directly.
 add_custom_command(
     OUTPUT ${benchmark_result_generated_files}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/tensorflow/lite/tools/benchmark/proto
     COMMAND ${Protobuf_PROTOC_EXECUTABLE}
-    ARGS --cpp_out=${CMAKE_BINARY_DIR} --proto_path=${TENSORFLOW_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/benchmark_result.proto
+    ARGS --cpp_out=${CMAKE_BINARY_DIR} --proto_path=${TENSORFLOW_SOURCE_DIR} tensorflow/lite/tools/benchmark/proto/benchmark_result.proto
     DEPENDS ${Protobuf_PROTOC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/benchmark_result.proto
 )
 

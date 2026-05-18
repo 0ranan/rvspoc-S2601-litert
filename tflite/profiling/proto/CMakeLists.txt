@@ -25,8 +25,12 @@ list(APPEND profiling_info_generated_files
 # upgraded, we can use protobuf_generate_cpp/protobuf_generate here directly.
 add_custom_command(
     OUTPUT ${profiling_info_generated_files}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/tensorflow/lite/profiling/proto
     COMMAND ${Protobuf_PROTOC_EXECUTABLE}
-    ARGS --cpp_out=${CMAKE_BINARY_DIR} --proto_path=${TENSORFLOW_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/profiling_info.proto
+    ARGS
+        --cpp_out=${CMAKE_BINARY_DIR}
+        --proto_path=${TENSORFLOW_SOURCE_DIR}
+        tensorflow/lite/profiling/proto/profiling_info.proto
     DEPENDS ${Protobuf_PROTOC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/profiling_info.proto
 )
 
@@ -46,8 +50,12 @@ list(APPEND model_runtime_info_generated_files
 # upgraded, we can use protobuf_generate_cpp/protobuf_generate here directly.
 add_custom_command(
     OUTPUT ${model_runtime_info_generated_files}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/tensorflow/lite/profiling/proto
     COMMAND ${Protobuf_PROTOC_EXECUTABLE}
-    ARGS --cpp_out=${CMAKE_BINARY_DIR} --proto_path=${TENSORFLOW_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/model_runtime_info.proto
+    ARGS
+        --cpp_out=${CMAKE_BINARY_DIR}
+        --proto_path=${TENSORFLOW_SOURCE_DIR}
+        tensorflow/lite/profiling/proto/model_runtime_info.proto
     DEPENDS ${Protobuf_PROTOC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/model_runtime_info.proto ${profiling_info_generated_files}
 )
 
