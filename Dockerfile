@@ -20,13 +20,29 @@ ENV http_proxy=http://${PROXY_HOST}:${PROXY_PORT} \
     no_proxy=localhost,127.0.0.1,host.docker.internal,mirrors.aliyun.com,pypi.tuna.tsinghua.edu.cn
 
 # Ubuntu apt 镜像源（阿里云）
+# RUN sed -i \
+#     -e 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' \
+#     -e 's|http://security.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' \
+#     /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
+#     sed -i \
+#     's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g; \
+#      s|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' \
+#     /etc/apt/sources.list
+
+# 配置 apt 重试次数和超时时间
+RUN echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::http::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::https::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::http::Pipeline-Depth "0";' >> /etc/apt/apt.conf.d/80-retries
+
+# Ubuntu apt 镜像源（清华）
 RUN sed -i \
-    -e 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' \
-    -e 's|http://security.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' \
+    -e 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
+    -e 's|http://security.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
     /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
     sed -i \
-    's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g; \
-     s|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' \
+    's|http://archive.ubuntu.com/ubuntu|http://mirrors.tuna.tsinghua.edu.cn/ubuntu|g; \
+     s|http://security.ubuntu.com/ubuntu|http://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
     /etc/apt/sources.list
 
 # pip 镜像源（清华）
@@ -37,23 +53,18 @@ RUN mkdir -p /root/.pip && printf '%s\n' \
     > /root/.pip/pip.conf
 
 # 安装基础依赖
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    git \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl git wget unzip zip \
+    python3 python3-pip python3-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# 安装 OpenJDK 17
+RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-17-jdk \
-    python3 \
-    python3-pip \
-    python3-dev \
-    unzip \
-    wget \
-    zip \
-    llvm-18 \
-    clang-18 \
-    libc++-dev \
-    libc++abi-dev \
-    && apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# 安装 LLVM 18
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    llvm-18 clang-18 libc++-dev libc++abi-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 安装 Bazelisk 以处理自动 Bazel 版本管理
 # RUN ARCH=$(uname -m) && \
