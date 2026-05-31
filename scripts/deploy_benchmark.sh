@@ -491,6 +491,107 @@ test_ssh_connection() {
     fi
 }
 
+# ========================== 性能验证表生成 ==========================
+# benchmark_model 实际输出格式参考:
+#   INFO: count=50 first=1405610 curr=1399855 min=1388740 max=1471249 avg=1.41336e+06 std=15452 p5=1393042 median=1413595 p95=1436059
+#   INFO: Inference timings in us: Init: 19835, First inference: 1463259, Warmup (avg): 1.46326e+06, Inference (avg): 1.41336e+06
+#   INFO: Initialized session in 19.835ms.
+#   INFO: Memory footprint delta from the start of the tool (MB): init=3.29297 overall=42.8438
+generate_perf_table() {
+    local result_file="$1"
+
+    local avg_us="" median_us="" p95_us="" std_us="" init_ms="" footprint_mb_val=""
+
+    local count_line
+    count_line=$(grep -E "^INFO: count=" "$result_file" | tail -1)
+
+    if [[ -n "$count_line" ]]; then
+        avg_us=$(echo "$count_line" | grep -oP 'avg=\K[0-9.e+]+')
+        median_us=$(echo "$count_line" | grep -oP 'median=\K[0-9.e+]+')
+        p95_us=$(echo "$count_line" | grep -oP 'p95=\K[0-9.e+]+')
+        std_us=$(echo "$count_line" | grep -oP 'std=\K[0-9.e+]+')
+    fi
+
+    if [[ -z "$avg_us" ]]; then
+        local inference_line
+        inference_line=$(grep -E "Inference timings in us:" "$result_file" | tail -1)
+        if [[ -n "$inference_line" ]]; then
+            avg_us=$(echo "$inference_line" | grep -oP 'Inference \(avg\):\s*\K[0-9.e+]+')
+        fi
+    fi
+
+    init_ms=$(grep -oP 'Initialized session in \K[0-9.]+' "$result_file" | tail -1)
+
+    footprint_mb_val=$(grep -oP 'overall=\K[0-9.]+' "$result_file" | tail -1)
+
+    local batch_size=1
+    if [[ -n "${BENCHMARK_ARGS:-}" ]]; then
+        local bs
+        bs=$(echo "${BENCHMARK_ARGS}" | grep -oP '(?<=--batch_size[= ])\d+')
+        if [[ -n "$bs" ]]; then
+            batch_size="$bs"
+        fi
+    fi
+
+    local avg_ms="n/a" p50_ms="n/a" p95_ms="n/a" std_ms="n/a"
+    if [[ -n "$avg_us" ]]; then
+        avg_ms=$(awk "BEGIN {printf \"%.3f\", ${avg_us}/1000}")
+    fi
+    if [[ -n "$median_us" ]]; then
+        p50_ms=$(awk "BEGIN {printf \"%.3f\", ${median_us}/1000}")
+    fi
+    if [[ -n "$p95_us" ]]; then
+        p95_ms=$(awk "BEGIN {printf \"%.3f\", ${p95_us}/1000}")
+    fi
+    if [[ -n "$std_us" ]]; then
+        std_ms=$(awk "BEGIN {printf \"%.3f\", ${std_us}/1000}")
+    fi
+
+    local fps="n/a"
+    if [[ "$avg_ms" != "n/a" ]]; then
+        fps=$(awk "BEGIN {printf \"%.2f\", ${batch_size}*1000/${avg_ms}}")
+    fi
+
+    local p95_avg_ratio="n/a"
+    if [[ "$p95_ms" != "n/a" && "$avg_ms" != "n/a" ]]; then
+        p95_avg_ratio=$(awk "BEGIN {printf \"%.3f\", ${p95_ms}/${avg_ms}}")
+    fi
+
+    local latency_pass="-"
+    if [[ "$avg_ms" != "n/a" ]]; then
+        latency_pass=$(awk "BEGIN {if (${avg_ms} <= 110) print \"PASS\"; else print \"FAIL\"}")
+    fi
+
+    local footprint_display="n/a"
+    if [[ -n "$footprint_mb_val" ]]; then
+        footprint_display=$(awk "BEGIN {printf \"%.2f\", ${footprint_mb_val}}")
+    fi
+
+    local init_display="${init_ms:-n/a}"
+
+    {
+        echo ""
+        echo "==========================================================="
+        echo "  性能验证表"
+        echo "==========================================================="
+        printf "| %-22s | %-28s | %-14s | %-12s |\n" "验证项" "算法/公式" "测量值" "判定"
+        printf "|%s|%s|%s|%s|\n" "------------------------" "------------------------------" "----------------" "--------------"
+        printf "| %-22s | %-28s | %12s ms | %-12s |\n" "推理延迟 - avg" "avg (平均)" "${avg_ms}" "${latency_pass} (≤110ms)"
+        printf "| %-22s | %-28s | %12s ms | %-12s |\n" "推理延迟 - p50" "p50 (中位数)" "${p50_ms}" "-"
+        printf "| %-22s | %-28s | %12s ms | %-12s |\n" "推理延迟 - p95" "p95 (尾延迟)" "${p95_ms}" "-"
+        printf "| %-22s | %-28s | %12s fps | %-12s |\n" "吞吐率 (FPS)" "batch_size×1000/latency_ms" "${fps}" "-"
+        printf "| %-22s | %-28s | %12s ms | %-12s |\n" "稳定性 - std" "std (标准差)" "${std_ms}" "-"
+        printf "| %-22s | %-28s | %14s | %-12s |\n" "稳定性 - p95/avg" "p95 / avg" "${p95_avg_ratio}" "-"
+        printf "| %-22s | %-28s | %12s MB | %-12s |\n" "内存占用" "Overall footprint" "${footprint_display}" "-"
+        printf "| %-22s | %-28s | %12s ms | %-12s |\n" "启动时间" "Model initialization" "${init_display}" "-"
+        echo "==========================================================="
+        echo ""
+        if [[ "$p50_ms" == "n/a" || "$p95_ms" == "n/a" ]]; then
+            echo "提示: p50/p95/std 未获取，建议在 BENCHMARK_ARGS 中添加 --num-runs=50 或更大值以启用百分位统计"
+        fi
+    } >> "${result_file}"
+}
+
 # ========================== SCP 上传 + 远端执行 + 结果保存 ==========================
 deploy_and_run() {
     local remote_bin_path="${REMOTE_DIR}/${REMOTE_BINARY_NAME}"
@@ -602,6 +703,15 @@ deploy_and_run() {
             echo "状态:         测试异常退出（详见上述输出）"
         fi
     } >> "${result_file}"
+
+    # ---------- 生成性能验证表 ----------
+    if [[ ${bench_exit_code} -eq 0 ]]; then
+        info "生成性能验证表..."
+        generate_perf_table "${result_file}"
+        success "性能验证表已写入报告"
+    else
+        warn "benchmark 异常退出，跳过性能验证表生成"
+    fi
 
     success "远端执行完成"
     success "测试结果已保存: ${result_file}"
