@@ -55,6 +55,7 @@ RUN mkdir -p /root/.pip && printf '%s\n' \
 # 安装基础依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl git wget unzip zip \
+    flatbuffers-compiler \
     python3 python3-pip python3-dev \
     protobuf-compiler \
     && apt-get clean && rm -rf /var/lib/apt/lists/*

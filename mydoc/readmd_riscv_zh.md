@@ -57,6 +57,10 @@ ARG PROXY_HOST={你的代理IP}
 ARG PROXY_PORT={你的代理端口}
 ```
 
+构建开发环境
+```bash
+docker compose build
+```
 
 启动开发环境
 ```bash
@@ -108,7 +112,7 @@ cmake -S . -B build-riscv64 \
 docker compose exec dev bash
 cd /app/litert/
 # 使用多线程编译并查看详细输出
-cmake --build build-release --target benchmark_model -j$(nproc) 2>&1 | tee build.log
+cmake --build build-riscv64 --target benchmark_model -j$(nproc) 2>&1 | tee build.log
 ```
 
 ### 测试benchmark_model

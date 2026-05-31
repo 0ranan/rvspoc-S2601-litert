@@ -6,12 +6,69 @@
 #   2. 通过 SSH 在远端执行
 #   3. 自动管理 SSH 配置（IP/端口/用户名/密码），首次运行时交互式输入并保存
 #
+# BUILD_DIR 参数说明：
+#   BUILD_DIR 指定 CMake 构建输出目录的路径，用于定位 benchmark_model 二进制文件。
+#   该参数支持以下传递方式（优先级从高到低）：
+#     1. 命令行参数:  --build-dir <路径>
+#     2. 环境变量:    BUILD_DIR=<路径>
+#     3. 配置文件:    .deploy_config 中 BUILD_DIR="<路径>"
+#     4. 默认值:      ${PROJECT_DIR}/build-release
+#   对于 RISC-V 架构构建，典型值为 build-riscv64，例如：
+#     ./deploy_benchmark.sh --build-dir /path/to/project/build-riscv64
+#   当 BUILD_DIR 有效时，脚本会自动在 ${BUILD_DIR} 下查找 benchmark_model 二进制，
+#   并将其作为 BENCHMARK_BIN 的默认候选路径，减少手动输入。
 
 set -euo pipefail
 
+# ========================== 命令行参数解析 ==========================
+# 解析 --build-dir 参数，用于指定 CMake 构建输出目录
+# 用法: --build-dir <路径>  或  --build-dir=<路径>
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --build-dir=*)
+                CLI_BUILD_DIR="${1#--build-dir=}"
+                shift
+                ;;
+            --build-dir)
+                if [[ $# -lt 2 ]]; then
+                    echo -e "${RED}[ERROR]${NC} --build-dir 需要一个参数" >&2
+                    exit 1
+                fi
+                CLI_BUILD_DIR="$2"
+                shift 2
+                ;;
+            -h|--help)
+                echo "用法: $0 [选项]"
+                echo ""
+                echo "选项:"
+                echo "  --build-dir <路径>  指定 CMake 构建输出目录路径"
+                echo "                      (默认: \${PROJECT_DIR}/build-release)"
+                echo "                      RISC-V 构建典型值: build-riscv64"
+                echo "  -h, --help          显示此帮助信息"
+                echo ""
+                echo "环境变量:"
+                echo "  BUILD_DIR           CMake 构建输出目录 (可被 --build-dir 覆盖)"
+                echo "  BENCHMARK_PATH      本地 .tflite 模型文件路径"
+                echo "  BENCHMARK_ARGS      benchmark_model 运行附加参数"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}[ERROR]${NC} 未知参数: $1" >&2
+                echo "使用 --help 查看用法" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
 # ========================== 配置区 ==========================
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="${PROJECT_DIR}/build-release"
+# BUILD_DIR: CMake 构建输出目录，用于定位 benchmark_model 二进制文件
+# 优先级: 命令行参数 > 环境变量 > 配置文件 > 默认值
+# 默认值为 build-release，RISC-V 构建应使用 build-riscv64
+BUILD_DIR="${BUILD_DIR:-${PROJECT_DIR}/build-release}"
+CLI_BUILD_DIR=""
 CONFIG_FILE="${PROJECT_DIR}/.deploy_config"
 REMOTE_DIR="/tmp"
 REMOTE_BINARY_NAME="benchmark_model"
@@ -71,12 +128,77 @@ SSH_IP="${SSH_IP}"
 SSH_PORT="${SSH_PORT}"
 SSH_USER="${SSH_USER}"
 SSH_PASS="${SSH_PASS}"
+BUILD_DIR="${BUILD_DIR}"
 BENCHMARK_BIN="${BENCHMARK_BIN:-}"
 BENCHMARK_PATH="${BENCHMARK_PATH:-}"
 EOF
         chmod 600 "$CONFIG_FILE"
         success "配置文件已保存 (权限 600)"
     fi
+}
+
+# ========================== BUILD_DIR 验证 ==========================
+# 验证 BUILD_DIR 的有效性：
+#   1. 命令行参数 --build-dir 优先级最高，会覆盖环境变量和配置文件中的值
+#   2. 检查路径是否为有效目录
+#   3. 检查目录中是否存在 CMake 构建产物（如 CMakeCache.txt）以确认是合法的构建目录
+#   4. 将最终确定的 BUILD_DIR 保存到配置文件，供后续使用
+save_build_dir_to_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        if grep -q "^BUILD_DIR=" "$CONFIG_FILE"; then
+            sed -i "s|^BUILD_DIR=.*|BUILD_DIR=\"${BUILD_DIR}\"|" "$CONFIG_FILE"
+        else
+            echo "BUILD_DIR=\"${BUILD_DIR}\"" >> "$CONFIG_FILE"
+        fi
+    fi
+}
+
+validate_build_dir() {
+    # 命令行参数优先级最高，覆盖环境变量和配置文件中的值
+    if [[ -n "${CLI_BUILD_DIR:-}" ]]; then
+        BUILD_DIR="${CLI_BUILD_DIR}"
+        info "使用命令行指定的 BUILD_DIR: ${BUILD_DIR}"
+    fi
+
+    # 解析为绝对路径
+    if [[ -n "${BUILD_DIR}" ]]; then
+        BUILD_DIR="$(realpath "${BUILD_DIR}" 2>/dev/null || echo "${BUILD_DIR}")"
+    fi
+
+    # 检查路径是否为空
+    if [[ -z "${BUILD_DIR}" ]]; then
+        warn "BUILD_DIR 为空，将使用默认值: ${PROJECT_DIR}/build-release"
+        BUILD_DIR="${PROJECT_DIR}/build-release"
+    fi
+
+    # 检查目录是否存在
+    if [[ ! -d "${BUILD_DIR}" ]]; then
+        warn "BUILD_DIR 目录不存在: ${BUILD_DIR}"
+        warn "  这可能意味着尚未执行 CMake 配置和构建"
+        warn "  脚本将继续运行，但可能无法自动定位 benchmark_model 二进制文件"
+        save_build_dir_to_config
+        return 0
+    fi
+
+    # 检查是否为有效的 CMake 构建目录（存在 CMakeCache.txt 或 Makefile 等标志文件）
+    if [[ -f "${BUILD_DIR}/CMakeCache.txt" ]] || [[ -f "${BUILD_DIR}/Makefile" ]]; then
+        success "BUILD_DIR 校验通过: ${BUILD_DIR} (有效的 CMake 构建目录)"
+    else
+        warn "BUILD_DIR 不是标准的 CMake 构建目录: ${BUILD_DIR}"
+        warn "  未找到 CMakeCache.txt 或 Makefile，该目录可能不是构建输出目录"
+    fi
+
+    # 检查构建目录中是否已存在 benchmark_model 二进制
+    local expected_bin="${BUILD_DIR}/${REMOTE_BINARY_NAME}"
+    if [[ -f "${expected_bin}" ]] && [[ -x "${expected_bin}" ]]; then
+        success "在 BUILD_DIR 中发现 benchmark_model: ${expected_bin}"
+    else
+        info "BUILD_DIR 中未找到可执行的 benchmark_model (预期路径: ${expected_bin})"
+        info "  后续将需要手动指定 BENCHMARK_BIN 路径"
+    fi
+
+    save_build_dir_to_config
+    success "BUILD_DIR 已保存到配置文件: ${BUILD_DIR}"
 }
 
 # ========================== BENCHMARK_BIN 输入与校验 ==========================
@@ -87,12 +209,18 @@ save_benchmark_bin_to_config() {
         else
             echo "BENCHMARK_BIN=\"${BENCHMARK_BIN}\"" >> "$CONFIG_FILE"
         fi
+        if grep -q "^BUILD_DIR=" "$CONFIG_FILE"; then
+            sed -i "s|^BUILD_DIR=.*|BUILD_DIR=\"${BUILD_DIR}\"|" "$CONFIG_FILE"
+        else
+            echo "BUILD_DIR=\"${BUILD_DIR}\"" >> "$CONFIG_FILE"
+        fi
     else
         cat > "$CONFIG_FILE" <<EOF
 SSH_IP="${SSH_IP:-}"
 SSH_PORT="${SSH_PORT:-22}"
 SSH_USER="${SSH_USER:-}"
 SSH_PASS="${SSH_PASS:-}"
+BUILD_DIR="${BUILD_DIR}"
 BENCHMARK_BIN="${BENCHMARK_BIN}"
 BENCHMARK_PATH="${BENCHMARK_PATH:-}"
 EOF
@@ -102,6 +230,10 @@ EOF
 
 validate_and_input_benchmark_bin() {
     local input_by_user=false
+
+    # 尝试基于 BUILD_DIR 自动推断 BENCHMARK_BIN 的默认路径
+    # 当 BENCHMARK_BIN 未配置时，在 BUILD_DIR 下查找 benchmark_model 二进制
+    local auto_detected_bin="${BUILD_DIR}/${REMOTE_BINARY_NAME}"
 
     if [[ -n "${BENCHMARK_BIN:-}" ]]; then
         info "使用已配置的 BENCHMARK_BIN: ${BENCHMARK_BIN}"
@@ -124,13 +256,36 @@ validate_and_input_benchmark_bin() {
         input_by_user=true
     fi
 
+    # 如果 BUILD_DIR 下存在可执行的 benchmark_model，自动使用该路径
+    if $input_by_user && [[ -f "${auto_detected_bin}" ]] && [[ -x "${auto_detected_bin}" ]]; then
+        info "在 BUILD_DIR 中自动发现 benchmark_model: ${auto_detected_bin}"
+        BENCHMARK_BIN="${auto_detected_bin}"
+        success "BENCHMARK_BIN 自动检测通过: ${BENCHMARK_BIN}"
+        save_benchmark_bin_to_config
+        success "BENCHMARK_BIN 已保存到配置文件"
+        return 0
+    fi
+
     local max_attempts=3
     local attempt=0
 
     while [[ $attempt -lt $max_attempts ]]; do
         attempt=$((attempt + 1))
         echo ""
-        read -r -p "请输入 benchmark_model 二进制文件的路径: " BENCHMARK_BIN
+        # 提示用户输入，并显示基于 BUILD_DIR 的推荐路径
+        local prompt_hint=""
+        if [[ -d "${BUILD_DIR}" ]]; then
+            prompt_hint=" (推荐: ${auto_detected_bin})"
+        fi
+        read -r -p "请输入 benchmark_model 二进制文件的路径${prompt_hint}: " BENCHMARK_BIN
+
+        # 如果用户直接按回车，尝试使用 BUILD_DIR 下的默认路径
+        if [[ -z "${BENCHMARK_BIN}" ]] && [[ -f "${auto_detected_bin}" ]] && [[ -x "${auto_detected_bin}" ]]; then
+            BENCHMARK_BIN="${auto_detected_bin}"
+            info "使用 BUILD_DIR 下的默认路径: ${BENCHMARK_BIN}"
+            success "BENCHMARK_BIN 校验通过: ${BENCHMARK_BIN}"
+            break
+        fi
 
         if [[ -z "${BENCHMARK_BIN}" ]]; then
             error "输入不能为空 (第 ${attempt}/${max_attempts} 次尝试)"
@@ -412,6 +567,7 @@ deploy_and_run() {
         echo "内存总量:     ${remote_mem}"
         echo ""
         echo "--- 运行参数 ---"
+        echo "构建目录:     ${BUILD_DIR}"
         echo "二进制路径:   ${remote_bin_path}"
         echo "模型文件:     ${REMOTE_MODEL_PATH}"
         echo "模型 MD5:     ${local_model_md5}"
@@ -453,6 +609,9 @@ deploy_and_run() {
 
 # ========================== 主流程 ==========================
 main() {
+    # 优先解析命令行参数，--build-dir 可覆盖环境变量中的 BUILD_DIR
+    parse_args "$@"
+
     echo "============================================="
     echo "   benchmark_model 部署 -> 执行工具"
     echo "============================================="
@@ -460,6 +619,8 @@ main() {
 
     load_config
     validate_and_fill_config
+    # 验证 BUILD_DIR：应用命令行参数覆盖、路径解析、目录有效性检查
+    validate_build_dir
     check_dependencies
     test_ssh_connection
     validate_and_input_benchmark_bin
