@@ -77,22 +77,28 @@ docker compose exec dev bash
 ```bash
 docker compose exec dev bash
 cd /app/litert/
-cmake -S . -B build-release \
+cmake -S . -B build-riscv64 \
       -DCMAKE_BUILD_TYPE=Release \
       -DLITERT_AUTO_BUILD_TFLITE=ON \
       -DLITERT_ENABLE_GPU=OFF \
       -DLITERT_ENABLE_NPU=OFF \
       -DLITERT_DISABLE_KLEIDIAI=ON \
+      -DTFLITE_ENABLE_XNNPACK=OFF \
+      -DBENCHMARK_ENABLE_TESTING=OFF \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-      -DTENSORFLOW_SOURCE_DIR=../third_party/tensorflow \
-      -DCMAKE_C_COMPILER=/usr/bin/clang \
-      -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+      -DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc \
+      -DCMAKE_C_COMPILER=/opt/riscv64-glibc/bin/riscv64-unknown-linux-gnu-gcc \
+      -DCMAKE_CXX_COMPILER=/opt/riscv64-glibc/bin/riscv64-unknown-linux-gnu-g++ \
       -DLITERT_HOST_C_COMPILER=/usr/bin/clang \
       -DLITERT_HOST_CXX_COMPILER=/usr/bin/clang++ \
+      -DTENSORFLOW_SOURCE_DIR=../third_party/tensorflow \
       -DNEUROPILOT_HEADERS_DIR=../vendor_headers/neuro_pilot/v8_0_8/host/include \
       -DQAIRT_HEADERS_DIR=../vendor_headers/qairt/2.44.0.260225/include/QNN \
       -DLITECORE_HEADERS_DIR=../vendor_headers/exynos-ai-litecore-v1.1.0/include \
-      2>&1 | tee cmake_config.log
+      -DCMAKE_SYSTEM_PROCESSOR=riscv64 \
+      -DCMAKE_SYSTEM_NAME=Linux \
+      -DTFLITE_HOST_TOOLS_DIR=/app/host_flatc_build/_deps/flatbuffers-build \
+      2>&1 | tee cmake_config_riscv64.log
 ```
 
 ###构建benchmark_model

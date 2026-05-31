@@ -841,6 +841,17 @@ endif()
 # tensorflow/lite directory structure for generated headers.
 set(TFLITE_GENERATED_HEADERS_DIR ${CMAKE_BINARY_DIR}/tensorflow/lite)
 
+# Create a symlink "tflite" -> "tensorflow/lite" so that includes using the
+# modified "tflite/" path prefix can find proto-generated headers at the
+# standard "tensorflow/lite/" location under CMAKE_BINARY_DIR.
+if(NOT EXISTS "${CMAKE_BINARY_DIR}/tflite")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+      "${TFLITE_GENERATED_HEADERS_DIR}"
+      "${CMAKE_BINARY_DIR}/tflite"
+  )
+endif()
+
 # Add the profiling proto directory.
 add_subdirectory(${TFLITE_SOURCE_DIR}/profiling/proto)
 
