@@ -56,6 +56,7 @@ RUN mkdir -p /root/.pip && printf '%s\n' \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl git wget unzip zip \
     python3 python3-pip python3-dev \
+    protobuf-compiler \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 # 安装 OpenJDK 17
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -64,6 +65,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安装 LLVM 18
 RUN apt-get update && apt-get install -y --no-install-recommends \
     llvm-18 clang-18 libc++-dev libc++abi-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# 安装 RISC-V GCC 交叉编译工具链
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
+#     && apt-get clean && rm -rf /var/lib/apt/lists/*
+# 安装 ARM64 (aarch64) GCC 交叉编译工具链
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 安装 Bazelisk 以处理自动 Bazel 版本管理
@@ -81,9 +90,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #     # 设置 USE_BAZEL_VERSION 确保 bazelisk 下载正确的版本
 #     echo "export USE_BAZEL_VERSION=7.4.1" >> /etc/bash.bashrc
 
+# 拷贝预下载包
+COPY package/ /tmp/package/
+
+
+# 安装riscv gcc
+RUN mkdir -p /opt/riscv64-glibc && \
+    tar -xvf /tmp/package/riscv64-glibc-ubuntu-24.04-gcc.tar.xz -C /opt/riscv64-glibc --strip-components=1 
+
+# 配置环境变量
+ENV PATH=/opt/riscv64-glibc/bin/:${PATH}
+
 # 安装Camke
 # 下载并安装指定版本的 CMake
-COPY package/ /tmp/package/
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
         tar -xzf /tmp/package/cmake-4.0.7-linux-x86_64.tar.gz -C /usr/local --strip-components=1 ; \
@@ -101,30 +120,3 @@ RUN ARCH=$(uname -m) && \
 RUN ln -s /usr/bin/clang-18 /usr/bin/clang && \
     ln -s /usr/bin/clang++-18 /usr/bin/clang++ && \
     ln -s /usr/bin/llvm-18 /usr/bin/llvm
-
-RUN mkdir -p /opt/toolchains && \
-    printf '%s\n' \
-    'set(CMAKE_SYSTEM_NAME Linux)' \
-    'set(CMAKE_SYSTEM_PROCESSOR riscv64)' \
-    '' \
-    'set(TOOLCHAIN_PREFIX riscv64-unknown-linux-gnu)' \
-    '' \
-    'set(CMAKE_C_COMPILER   ${TOOLCHAIN_PREFIX}-gcc)' \
-    'set(CMAKE_CXX_COMPILER ${TOOLCHAIN_PREFIX}-g++)' \
-    'set(CMAKE_AR           ${TOOLCHAIN_PREFIX}-ar      CACHE FILEPATH "")' \
-    'set(CMAKE_AS           ${TOOLCHAIN_PREFIX}-as      CACHE FILEPATH "")' \
-    'set(CMAKE_LINKER       ${TOOLCHAIN_PREFIX}-ld      CACHE FILEPATH "")' \
-    'set(CMAKE_OBJCOPY      ${TOOLCHAIN_PREFIX}-objcopy CACHE FILEPATH "")' \
-    'set(CMAKE_OBJDUMP      ${TOOLCHAIN_PREFIX}-objdump CACHE FILEPATH "")' \
-    'set(CMAKE_RANLIB       ${TOOLCHAIN_PREFIX}-ranlib  CACHE FILEPATH "")' \
-    'set(CMAKE_STRIP        ${TOOLCHAIN_PREFIX}-strip   CACHE FILEPATH "")' \
-    '' \
-    'set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)' \
-    'set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)' \
-    'set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)' \
-    'set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)' \
-    '' \
-    'set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=rv64gc" CACHE STRING "")' \
-    'set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=rv64gc" CACHE STRING "")' \
-    > /opt/toolchains/riscv64-unknown-linux-gnu.cmake
-
